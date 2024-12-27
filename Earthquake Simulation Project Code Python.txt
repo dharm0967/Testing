@@ -1,0 +1,167 @@
+import math
+import csv
+
+# Constants for P and S Wave Velocities
+P_WAVE_VELOCITY = 6.0  # P-wave velocity in km/s (simplified value)
+S_WAVE_VELOCITY = 3.5  # S-wave velocity in km/s (simplified value)
+
+MAX_EARTHQUAKES = 1000  # Maximum number of earthquakes to handle
+MAX_RECEIVERS = 100  # Maximum number of receivers to handle
+
+# Define the data structures
+class EarthquakeData:
+    def __init__(self, latitude, longitude, depth, magnitude):
+        self.latitude = latitude
+        self.longitude = longitude
+        self.depth = depth
+        self.magnitude = magnitude
+
+class ReceiverLocation:
+    def __init__(self, latitude, longitude):
+        self.latitude = latitude
+        self.longitude = longitude
+
+# Function to calculate the distance between two points on Earth's surface using Haversine formula
+def calculate_distance(lat1, lon1, lat2, lon2):
+    lat1_rad = math.radians(lat1)
+    lon1_rad = math.radians(lon1)
+    lat2_rad = math.radians(lat2)
+    lon2_rad = math.radians(lon2)
+
+    dlat = lat2_rad - lat1_rad
+    dlon = lon2_rad - lon1_rad
+
+    a = math.sin(dlat / 2) ** 2 + math.cos(lat1_rad) * math.cos(lat2_rad) * math.sin(dlon / 2) ** 2
+    c = 2 * math.atan2(math.sqrt(a), math.sqrt(1 - a))
+
+    R = 6371.0  # Earth's radius in kilometers
+    return R * c  # Returns the distance in kilometers
+
+# Function to parse earthquake data from a CSV file
+def parse_earthquake_data(filename):
+    eq_data = []
+    try:
+        with open(filename, 'r') as file:
+            csv_reader = csv.reader(file)
+            next(csv_reader)  # Skip header line
+            for row in csv_reader:
+                if len(row) == 4:
+                    try:
+                        latitude, longitude, depth, magnitude = map(float, row)
+                        eq_data.append(EarthquakeData(latitude, longitude, depth, magnitude))
+                    except ValueError:
+                        print(f"Skipping invalid line: {row}")
+    except FileNotFoundError:
+        print(f"Error: The file '{filename}' could not be found or opened.")
+        return []
+
+    # Limit the number of earthquake records to MAX_EARTHQUAKES
+    if len(eq_data) > MAX_EARTHQUAKES:
+        print(f"Warning: There are more than {MAX_EARTHQUAKES} earthquake records. Only the first {MAX_EARTHQUAKES} will be processed.")
+        eq_data = eq_data[:MAX_EARTHQUAKES]
+
+    return eq_data
+
+# Function to parse receiver data from a CSV file
+def parse_receiver_data(filename):
+    receivers = []
+    try:
+        with open(filename, 'r') as file:
+            csv_reader = csv.reader(file)
+            next(csv_reader)  # Skip header line
+            for row in csv_reader:
+                if len(row) == 2:
+                    try:
+                        latitude, longitude = map(float, row)
+                        receivers.append(ReceiverLocation(latitude, longitude))
+                    except ValueError:
+                        print(f"Skipping invalid receiver line: {row}")
+    except FileNotFoundError:
+        print(f"Error: The file '{filename}' could not be found or opened.")
+        return []
+
+    # Limit the number of receiver records to MAX_RECEIVERS
+    if len(receivers) > MAX_RECEIVERS:
+        print(f"Warning: There are more than {MAX_RECEIVERS} receiver locations. Only the first {MAX_RECEIVERS} will be processed.")
+        receivers = receivers[:MAX_RECEIVERS]
+
+    return receivers
+
+# Function to save the results to a CSV file
+def save_results_to_file(output_lines):
+    filename = input("Enter the filename to save the results (including .csv extension): ")
+    try:
+        with open(filename, 'w', newline='') as file:
+            writer = csv.writer(file)
+            writer.writerow(["EQ #", "Latitude", "Longitude", "Depth (km)", "Magnitude", "Distance (km)", "P-Wave Time (s)", "S-Wave Time (s)"])  # Header row
+            for line in output_lines:
+                writer.writerow(line)
+        print(f"Results have been saved to '{filename}'.")
+    except Exception as e:
+        print(f"Error saving file: {e}")
+
+def process_data():
+    print("------Welcome to the Earthquake Simulation Project! Author: Madhu Patel IITB------")
+    print("\nThis project reads earthquake data from a CSV file and displays key information about each earthquake.")
+    print("You will need to provide a CSV file containing earthquake data and receiver data.\n")
+
+    # Get the earthquake data file name from the user
+    earthquake_filename = input("Enter the filename for earthquake data (with path if not in the current directory): ")
+    eq_data = parse_earthquake_data(earthquake_filename)
+
+    if not eq_data:
+        print(f"Error: Could not read any earthquake data from '{earthquake_filename}'. Please check the file.")
+        return
+
+    print(f"Successfully read {len(eq_data)} earthquake records from '{earthquake_filename}'.")
+
+    # Get the receiver data file name from the user
+    receiver_filename = input("Enter the filename for receiver data (with path if not in the current directory): ")
+    receivers = parse_receiver_data(receiver_filename)
+
+    if not receivers:
+        print(f"Error: Could not read any receiver data from '{receiver_filename}'. Please check the file.")
+        return
+
+    print(f"Successfully read {len(receivers)} receiver records from '{receiver_filename}'.")
+
+    output_lines = []  # To store the output lines
+
+    # Output the earthquake data and calculate travel times for each receiver
+    for receiver_index, receiver in enumerate(receivers):
+        print(f"\nReceiver Location {receiver_index + 1}:")
+        print("--------------------------------------------------------")
+        print("| EQ # | Latitude    | Longitude   | Depth (km) | Magnitude | Distance (km) | P-Wave Time (s) | S-Wave Time (s) |")
+        print("--------------------------------------------------------")
+
+        for eq_index, eq in enumerate(eq_data):
+            distance = calculate_distance(eq.latitude, eq.longitude, receiver.latitude, receiver.longitude)
+            p_wave_time = distance / P_WAVE_VELOCITY  # Time = Distance / Velocity
+            s_wave_time = distance / S_WAVE_VELOCITY
+
+            # Print output line
+            output_line = f"| {eq_index + 1:<4} | {eq.latitude:<12.8f} | {eq.longitude:<12.8f} | {eq.depth:<10.2f} | {eq.magnitude:<9.1f} | {distance:<13.2f} | {p_wave_time:<17.2f} | {s_wave_time:<15.2f} |"
+            print(output_line)
+
+            # Add to output lines for saving later
+            output_lines.append([eq_index + 1, eq.latitude, eq.longitude, eq.depth, eq.magnitude, distance, p_wave_time, s_wave_time])
+
+        print("--------------------------------------------------------")
+
+    # Ask if the user wants to save the result
+    save_option = input("Do you want to save the results to a file? (y/n): ").strip().lower()
+    if save_option == 'y':
+        save_results_to_file(output_lines)
+
+def main():
+    while True:
+        process_data()
+
+        # Ask if the user wants to process more data
+        continue_option = input("Do you want to process more data? (y/n): ").strip().lower()
+        if continue_option != 'y':
+            print("Thank you for using the Earthquake Simulation Project!")
+            break
+
+if __name__ == "__main__":
+    main()
